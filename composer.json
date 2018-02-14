@@ -5,7 +5,7 @@
     "description": "这是一个威富通（swiftpass）支付工具类，实现了微信原生支付、跳转支付、退款、交易查询、退款查询等功能",
     "keywords": ["swiftpass", "威富通", "支付"],
     "homepage": "https://github.com/Barbery/swiftpass",
-    "license": "Apache2.0",
+    "license": "Apache-2.0",
     "authors": [
         {
             "name": "Barbery Xie",
