@@ -2,6 +2,7 @@
 
 namespace Barbery;
 
+use Exception;
 use GuzzleHttp\Client;
 use SimpleXMLElement;
 
@@ -12,11 +13,24 @@ class SwiftPass
 {
     private $config = [];
 
-    const HTTP_TIMEOUT = 6.0;
-    const GATEWAY      = 'https://pay.swiftpass.cn/pay/gateway';
+    const HTTP_TIMEOUT  = 6.0;
+    const GATEWAY       = 'https://pay.swiftpass.cn/pay/gateway';
+    const SIGN_TYPE_RSA = 'RSA_1_256';
 
     public function __construct(array $config)
     {
+        if (empty($config['sign_type']) && empty($config['mch_key'])) {
+            throw new Exception('sign_type为md5加密方式时，mch_key不能为空');
+        }
+
+        if ($config['sign_type'] === self::SIGN_TYPE_RSA && empty($config['private_key']) && empty($config['platform_public_key'])) {
+            throw new Exception('sign_type为RSA_1_256加密方式时，private_key、platform_public_key不能为空');
+        }
+
+        if (empty($config['notify_url'])) {
+            throw new Exception('notify_url不能为空');
+        }
+
         $this->config = $config;
     }
 
@@ -60,7 +74,11 @@ class SwiftPass
 
     public function isValidSign($sign, $data)
     {
-        return $sign === $this->_getSign($data);
+        if ($data['sign_type'] === self::SIGN_TYPE_RSA) {
+            return openssl_verify($this->_getRSASign($data), base64_decode($sign), $this->config['platform_public_key'], OPENSSL_ALGO_SHA256) === 1;
+        } else {
+            return $sign === $this->_getMD5Sign($data);
+        }
     }
 
     private function _getNonceStr()
@@ -68,20 +86,33 @@ class SwiftPass
         return md5(random_bytes(16));
     }
 
-    private function _getSign($data)
+    private function _getSignStr($data)
     {
         if (is_array($data)) {
             ksort($data);
         }
 
+        // sign不参与签名
+        unset($data['sign']);
         $str = '';
         foreach ($data as $key => $value) {
             $str .= "{$key}={$value}&";
         }
 
-        $str .= "key={$this->config['mch_key']}";
+        return $str;
+    }
 
+    private function _getMD5Sign($data)
+    {
+        $str = $this->_getSignStr($data) . "key={$this->config['mch_key']}";
         return strtoupper(md5($str));
+    }
+
+    private function _getRSASign($data)
+    {
+        $str = rtrim($this->_getSignStr($data), '&');
+        openssl_sign($str, $signature, $this->config['private_key'], OPENSSL_ALGO_SHA256);
+        return base64_encode($signature);
     }
 
     private function _post(array $data)
@@ -90,15 +121,19 @@ class SwiftPass
             'timeout' => self::HTTP_TIMEOUT,
         ]);
         $Response = $Client->request('POST', self::GATEWAY, ['body' => $this->_prepare($data)]);
-
-        return simplexml_load_string($Response->getBody());
+        return simplexml_load_string($Response->getBody()->getContents());
     }
 
     private function _prepare(array $data)
     {
         $data['mch_id']    = $this->config['mch_id'];
         $data['nonce_str'] = $this->_getNonceStr();
-        $data['sign']      = $this->_getSign($data);
+        if ($this->config['sign_type'] === self::SIGN_TYPE_RSA) {
+            $data['sign_type'] = self::SIGN_TYPE_RSA;
+            $data['sign']      = $this->_getRSASign($data);
+        } else {
+            $data['sign'] = $this->_getMD5Sign($data);
+        }
 
         return $this->_arrayToXML($data);
     }
