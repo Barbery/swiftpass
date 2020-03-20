@@ -13,8 +13,9 @@ class SwiftPass
 {
     private $config = [];
 
-    const HTTP_TIMEOUT  = 6.0;
-    const GATEWAY       = 'https://pay.swiftpass.cn/pay/gateway';
+    const HTTP_TIMEOUT = 6.0;
+    // const GATEWAY       = 'https://pay.swiftpass.cn/pay/gateway';
+    const GATEWAY       = 'https://payapi.citicbank.com/pay/gateway';
     const SIGN_TYPE_RSA = 'RSA_1_256';
 
     public function __construct(array $config)
@@ -47,7 +48,7 @@ class SwiftPass
 
     public function getPayLink($tokenId, $showWxTitle = 1)
     {
-        return "https://pay.swiftpass.cn/pay/jspay?token_id={$tokenId}&showwxtitle={$showWxTitle}";
+        return "https://payapi.citicbank.com/pay/jspay?token_id={$tokenId}&showwxtitle={$showWxTitle}";
     }
 
     public function refund(array $data)
@@ -74,7 +75,7 @@ class SwiftPass
 
     public function isValidSign($sign, $data)
     {
-        if ($data['sign_type'] === self::SIGN_TYPE_RSA) {
+        if (isset($data['sign_type']) && $data['sign_type'] === self::SIGN_TYPE_RSA) {
             return openssl_verify($this->_getRSASign($data), base64_decode($sign), $this->config['platform_public_key'], OPENSSL_ALGO_SHA256) === 1;
         } else {
             return $sign === $this->_getMD5Sign($data);
@@ -128,7 +129,7 @@ class SwiftPass
     {
         $data['mch_id']    = $this->config['mch_id'];
         $data['nonce_str'] = $this->_getNonceStr();
-        if ($this->config['sign_type'] === self::SIGN_TYPE_RSA) {
+        if (isset($this->config['sign_type']) && $this->config['sign_type'] === self::SIGN_TYPE_RSA) {
             $data['sign_type'] = self::SIGN_TYPE_RSA;
             $data['sign']      = $this->_getRSASign($data);
         } else {
